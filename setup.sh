@@ -60,7 +60,7 @@ echo -e "\n${YELLOW}[2/9] Installing Docker...${NC}"
 curl -sSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 
-# Disable IPv6 for Docker to avoid pull issues
+# Disable IPv6 for Docker to avoid image pull failures
 sudo mkdir -p /etc/docker
 sudo tee /etc/docker/daemon.json > /dev/null <<EOF
 {
@@ -79,7 +79,8 @@ echo -e "${GREEN}Docker installed successfully${NC}"
 
 echo -e "\n${YELLOW}[3/9] Installing Tailscale...${NC}"
 curl -fsSL https://tailscale.com/install.sh | sh
-echo -e "${GREEN}Tailscale installed. Authenticate with the URL below:${NC}"
+echo -e "${GREEN}Tailscale installed.${NC}"
+echo -e "${YELLOW}Opening Tailscale authentication — copy the URL below into your browser:${NC}"
 sudo tailscale up
 
 # =============================================================
@@ -107,6 +108,20 @@ echo -e "\n${YELLOW}[6/9] Creating Docker Compose stack...${NC}"
 cat > ~/homelab/docker-compose.yml << COMPOSE
 services:
 
+  # --- Homepage - Service Dashboard (set up first!) ---
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    volumes:
+      - homepage_config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Your/Timezone
+      - HOMEPAGE_ALLOWED_HOSTS=${HOSTNAME}.local:3005,${LOCAL_IP}:3005
+
   # --- Portainer - Docker Management UI ---
   portainer:
     image: portainer/portainer-ce:2.21.5-alpine
@@ -129,7 +144,7 @@ services:
     environment:
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_SCHEDULE=0 0 4 * * *
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
 
   # --- Home Assistant - Smart Home Hub ---
   homeassistant:
@@ -138,7 +153,7 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
     volumes:
       - homeassistant_config:/config
     privileged: true
@@ -164,7 +179,7 @@ services:
     ports:
       - "5678:5678"
     environment:
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
@@ -183,7 +198,7 @@ services:
       - "53:53/udp"
       - "8053:80"
     environment:
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
       - WEBPASSWORD=${PIHOLE_PASSWORD}
     volumes:
       - pihole_data:/etc/pihole
@@ -200,7 +215,7 @@ services:
     ports:
       - "8080:80"
     environment:
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
       - WEBSOCKET_ENABLED=true
     volumes:
       - vaultwarden_data:/data
@@ -233,7 +248,7 @@ services:
     ports:
       - "8181:80"
     environment:
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
       - MYSQL_HOST=nextcloud-db
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
@@ -266,7 +281,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     environment:
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
 
   # --- Open WebUI - Chat Interface for Ollama ---
   open-webui:
@@ -277,27 +292,14 @@ services:
       - "3000:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - TZ=Australia/Perth
+      - TZ=Your/Timezone
     volumes:
       - open_webui_data:/app/backend/data
     depends_on:
       - ollama
 
-  # --- Homepage - Service Dashboard ---
-  homepage:
-    image: ghcr.io/gethomepage/homepage:latest
-    container_name: homepage
-    restart: unless-stopped
-    ports:
-      - "3005:3000"
-    volumes:
-      - homepage_config:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - TZ=Australia/Perth
-      - HOMEPAGE_ALLOWED_HOSTS=${HOSTNAME}.local:3005,${LOCAL_IP}:3005
-
 volumes:
+  homepage_config:
   portainer_data:
   homeassistant_config:
   npm_data:
@@ -312,7 +314,6 @@ volumes:
   nextcloud_db_data:
   ollama_data:
   open_webui_data:
-  homepage_config:
 COMPOSE
 
 echo -e "${GREEN}Docker Compose file created${NC}"
@@ -323,13 +324,15 @@ echo -e "${GREEN}Docker Compose file created${NC}"
 
 echo -e "\n${YELLOW}[7/9] Configuring Homepage dashboard...${NC}"
 
-# Pull and start homepage first to create config volume
+# Start homepage first so config volume is created
 docker compose -f ~/homelab/docker-compose.yml pull homepage
 docker compose -f ~/homelab/docker-compose.yml up -d homepage
-sleep 5
+sleep 8
 
-# Write services config
-docker exec -it homepage sh -c "cat > /app/config/services.yaml << 'EOF'
+# Write services config directly to volume
+VOL_PATH=$(docker inspect homepage --format '{{ range .Mounts }}{{ if eq .Destination "/app/config" }}{{ .Source }}{{ end }}{{ end }}')
+
+cat > "${VOL_PATH}/services.yaml" << EOF
 - Management:
     - Portainer:
         href: https://${LOCAL_IP}:9443
@@ -383,7 +386,7 @@ docker exec -it homepage sh -c "cat > /app/config/services.yaml << 'EOF'
         href: http://${LOCAL_IP}:3000
         description: Local AI Chat
         icon: ollama.png
-EOF"
+EOF
 
 docker restart homepage
 echo -e "${GREEN}Homepage configured${NC}"
@@ -405,24 +408,28 @@ echo -e "${GREEN}=================================================${NC}"
 echo -e "${GREEN}  🎉 Pi Homelab is ready!${NC}"
 echo -e "${GREEN}=================================================${NC}"
 echo ""
-echo -e "Access your services at:"
-echo -e "  ${BLUE}http://${LOCAL_IP}:3005${NC}        — Homepage Dashboard"
-echo -e "  ${BLUE}http://${LOCAL_IP}:8123${NC}        — Home Assistant"
-echo -e "  ${BLUE}http://${LOCAL_IP}:5678${NC}        — n8n Automation"
-echo -e "  ${BLUE}http://${LOCAL_IP}:81${NC}          — Nginx Proxy Manager"
-echo -e "  ${BLUE}http://${LOCAL_IP}:8080${NC}        — Vaultwarden"
-echo -e "  ${BLUE}http://${LOCAL_IP}:3001${NC}        — Uptime Kuma"
-echo -e "  ${BLUE}http://${LOCAL_IP}:8181${NC}        — Nextcloud"
-echo -e "  ${BLUE}http://${LOCAL_IP}:8888${NC}        — Stirling PDF"
-echo -e "  ${BLUE}http://${LOCAL_IP}:3000${NC}        — Open WebUI (AI)"
-echo -e "  ${BLUE}http://${LOCAL_IP}:8053/admin${NC}  — Pi-hole"
-echo -e "  ${BLUE}http://${LOCAL_IP}:19999${NC}       — Netdata"
-echo -e "  ${BLUE}https://${LOCAL_IP}:9443${NC}       — Portainer"
+echo -e "${BLUE}Open your dashboard first:${NC}"
+echo -e "  🏠  http://${LOCAL_IP}:3005  (bookmark this!)"
 echo ""
-echo -e "${YELLOW}⚠️  Remember to:${NC}"
-echo "  1. Change default passwords (Nginx Proxy Manager: admin@example.com / changeme)"
-echo "  2. Set up Tailscale for remote access: sudo tailscale up"
+echo -e "All services:"
+echo -e "  http://${LOCAL_IP}:3005        — Homepage Dashboard"
+echo -e "  http://${LOCAL_IP}:8123        — Home Assistant"
+echo -e "  http://${LOCAL_IP}:5678        — n8n Automation"
+echo -e "  http://${LOCAL_IP}:81          — Nginx Proxy Manager"
+echo -e "  http://${LOCAL_IP}:8080        — Vaultwarden"
+echo -e "  http://${LOCAL_IP}:3001        — Uptime Kuma"
+echo -e "  http://${LOCAL_IP}:8181        — Nextcloud"
+echo -e "  http://${LOCAL_IP}:8888        — Stirling PDF"
+echo -e "  http://${LOCAL_IP}:3000        — Open WebUI (AI)"
+echo -e "  http://${LOCAL_IP}:8053/admin  — Pi-hole"
+echo -e "  http://${LOCAL_IP}:19999       — Netdata"
+echo -e "  https://${LOCAL_IP}:9443       — Portainer"
+echo ""
+echo -e "${YELLOW}⚠️  Next steps:${NC}"
+echo "  1. Bookmark http://${LOCAL_IP}:3005 as your homelab dashboard"
+echo "  2. Set up Nginx Proxy Manager at http://${LOCAL_IP}:81 (create your own credentials on first login)"
 echo "  3. Point your router DNS to ${LOCAL_IP} to enable Pi-hole network-wide"
 echo "  4. Pull an AI model: docker exec -it ollama ollama pull llama3.2"
+echo "  5. Tailscale IP for remote access: $(tailscale ip -4 2>/dev/null || echo 'run: tailscale ip -4')"
 echo ""
 echo -e "${GREEN}Enjoy your homelab! 🚀${NC}"
