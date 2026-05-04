@@ -1,0 +1,208 @@
+services:
+
+  # --- Portainer - Docker Management UI ---
+  portainer:
+    image: portainer/portainer-ce:2.21.5-alpine
+    container_name: portainer
+    restart: always
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+  # --- Watchtower - Auto Update Containers ---
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *
+      - TZ=Australia/Perth
+
+  # --- Home Assistant - Smart Home Hub ---
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=Australia/Perth
+    volumes:
+      - homeassistant_config:/config
+    privileged: true
+
+  # --- Nginx Proxy Manager - Reverse Proxy ---
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+
+  # --- n8n - Automation Workflows ---
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - TZ=Australia/Perth
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=changeme
+      - N8N_HOST=0.0.0.0
+      - WEBHOOK_URL=http://homelab.local:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # --- Pi-hole - Network Ad Blocking ---
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: always
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8053:80"
+    environment:
+      - TZ=Australia/Perth
+      - WEBPASSWORD=changeme
+    volumes:
+      - pihole_data:/etc/pihole
+      - pihole_dnsmasq:/etc/dnsmasq.d
+    dns:
+      - 127.0.0.1
+      - 1.1.1.1
+
+  # --- Vaultwarden - Self Hosted Password Manager ---
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - TZ=Australia/Perth
+      - WEBSOCKET_ENABLED=true
+    volumes:
+      - vaultwarden_data:/data
+
+  # --- Uptime Kuma - Service Monitoring ---
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+
+  # --- Stirling PDF - PDF Tools ---
+  stirling-pdf:
+    image: frooodle/s-pdf:latest
+    container_name: stirling-pdf
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    volumes:
+      - stirling_data:/configs
+
+  # --- Nextcloud - Self Hosted Cloud Storage ---
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    restart: unless-stopped
+    ports:
+      - "8181:80"
+    environment:
+      - TZ=Australia/Perth
+      - MYSQL_HOST=nextcloud-db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud_password
+    volumes:
+      - nextcloud_data:/var/www/html
+    depends_on:
+      - nextcloud-db
+
+  # --- Nextcloud Database ---
+  nextcloud-db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud_password
+    volumes:
+      - nextcloud_db_data:/var/lib/mysql
+
+  # --- Ollama - Local LLM Engine ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - TZ=Australia/Perth
+
+  # --- Open WebUI - Chat Interface for Ollama ---
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - TZ=Australia/Perth
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      - ollama
+
+  # --- Homepage - Service Dashboard ---
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    volumes:
+      - homepage_config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Australia/Perth
+      - HOMEPAGE_ALLOWED_HOSTS=homelab.local:3005,YOUR_PI_IP:3005
+
+volumes:
+  portainer_data:
+  homeassistant_config:
+  npm_data:
+  npm_letsencrypt:
+  n8n_data:
+  pihole_data:
+  pihole_dnsmasq:
+  vaultwarden_data:
+  uptime_kuma_data:
+  stirling_data:
+  nextcloud_data:
+  nextcloud_db_data:
+  ollama_data:
+  open_webui_data:
+  homepage_config:

@@ -1,0 +1,13 @@
+# Environment files
+.env
+*.env
+
+# Local config overrides
+local/
+
+# Docker volumes (don't commit data)
+volumes/
+
+# OS files
+.DS_Store
+Thumbs.db

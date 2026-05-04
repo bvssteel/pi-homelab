@@ -1,0 +1,53 @@
+- Management:
+    - Portainer:
+        href: https://YOUR_PI_IP:9443
+        description: Docker Management
+        icon: portainer.png
+    - Nginx Proxy Manager:
+        href: http://YOUR_PI_IP:81
+        description: Reverse Proxy
+        icon: nginx-proxy-manager.png
+
+- Automation:
+    - n8n:
+        href: http://YOUR_PI_IP:5678
+        description: Workflow Automation
+        icon: n8n.png
+    - Home Assistant:
+        href: http://YOUR_PI_IP:8123
+        description: Smart Home Hub
+        icon: home-assistant.png
+
+- Monitoring:
+    - Uptime Kuma:
+        href: http://YOUR_PI_IP:3001
+        description: Service Monitoring
+        icon: uptime-kuma.png
+    - Netdata:
+        href: http://YOUR_PI_IP:19999
+        description: System Performance
+        icon: netdata.png
+    - Pi-hole:
+        href: http://YOUR_PI_IP:8053/admin
+        description: Ad Blocking
+        icon: pi-hole.png
+
+- Storage and Tools:
+    - Nextcloud:
+        href: http://YOUR_PI_IP:8181
+        description: Self Hosted Cloud
+        icon: nextcloud.png
+    - Vaultwarden:
+        href: http://YOUR_PI_IP:8080
+        description: Password Manager
+        icon: vaultwarden.png
+    - Stirling PDF:
+        href: http://YOUR_PI_IP:8888
+        description: PDF Tools
+        icon: stirling-pdf.png
+
+- AI:
+    - Open WebUI:
+        href: http://YOUR_PI_IP:3000
+        description: Local AI Chat
+        icon: ollama.png
