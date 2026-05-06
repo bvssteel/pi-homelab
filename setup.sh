@@ -15,16 +15,15 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Install figlet for banner rendering if not present
+sudo apt-get install -y figlet > /dev/null 2>&1
+
+clear
 echo -e "${BLUE}"
-echo "  ____  _   _   _  _                 _       _     "
-echo " |  _ \(_) | | | || | ___  _ __ ___  | | __ _| |__  "
-echo " | |_) | | | |_| || |/ _ \| '_ \` _ \ | |/ _\` | '_ \ "
-echo " |  __/| | |  _  || | (_) | | | | | || | (_| | |_) |"
-echo " |_|   |_| |_| |_||_|\___/|_| |_| |_||_|\__,_|_.__/ "
-echo ""
+figlet -f slant "Pi Homelab"
 echo -e "${NC}"
-echo -e "${GREEN}Raspberry Pi 5 Home Server Setup${NC}"
-echo "================================================="
+echo -e "${GREEN}  Raspberry Pi 5 Home Server Setup${NC}"
+echo "  ================================================="
 echo ""
 
 # =============================================================
@@ -405,11 +404,11 @@ cd ~/homelab && docker compose pull && docker compose up -d
 echo -e "\n${YELLOW}[9/9] Setup complete!${NC}"
 echo ""
 echo -e "${GREEN}=================================================${NC}"
-echo -e "${GREEN}  🎉 Pi Homelab is ready!${NC}"
+echo -e "${GREEN}  Pi Homelab is ready!${NC}"
 echo -e "${GREEN}=================================================${NC}"
 echo ""
 echo -e "${BLUE}Open your dashboard first:${NC}"
-echo -e "  🏠  http://${LOCAL_IP}:3005  (bookmark this!)"
+echo -e "  http://${LOCAL_IP}:3005  (bookmark this!)"
 echo ""
 echo -e "All services:"
 echo -e "  http://${LOCAL_IP}:3005        — Homepage Dashboard"
@@ -425,11 +424,11 @@ echo -e "  http://${LOCAL_IP}:8053/admin  — Pi-hole"
 echo -e "  http://${LOCAL_IP}:19999       — Netdata"
 echo -e "  https://${LOCAL_IP}:9443       — Portainer"
 echo ""
-echo -e "${YELLOW}⚠️  Next steps:${NC}"
+echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Bookmark http://${LOCAL_IP}:3005 as your homelab dashboard"
 echo "  2. Set up Nginx Proxy Manager at http://${LOCAL_IP}:81 (create your own credentials on first login)"
 echo "  3. Point your router DNS to ${LOCAL_IP} to enable Pi-hole network-wide"
 echo "  4. Pull an AI model: docker exec -it ollama ollama pull llama3.2"
 echo "  5. Tailscale IP for remote access: $(tailscale ip -4 2>/dev/null || echo 'run: tailscale ip -4')"
 echo ""
-echo -e "${GREEN}Enjoy your homelab! 🚀${NC}"
+echo -e "${GREEN}Enjoy your homelab!${NC}"
