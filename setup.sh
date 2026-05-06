@@ -1,1 +1,503 @@
-#!/bin/bash\n\n# =============================================================\n# Pi Homelab Setup Script\n# Automated Raspberry Pi 5 home server setup\n# https://github.com/Elhard1/pi-homelab\n# =============================================================\n\nset -e\n\n# Colours\nRED='\\033[0;31m'\nGREEN='\\033[0;32m'\nYELLOW='\\033[1;33m'\nBLUE='\\033[0;34m'\nNC='\\033[0m'\n\n# Install figlet for banner rendering\nsudo apt-get install -y figlet > /dev/null 2>&1\n\nclear\necho -e \"${BLUE}\"\nfiglet -f slant \"Pi Homelab\"\necho -e \"${NC}\"\necho -e \"${GREEN}  Raspberry Pi 5 Home Server Setup${NC}\"\necho \"  =================================================\"\necho \"\"\n\n# =============================================================\n# COLLECT USER INPUT\n# =============================================================\n\nread -p \"Enter your hostname (default: homelab): \" HOSTNAME\nHOSTNAME=${HOSTNAME:-homelab}\n\nread -s -p \"Enter Pi-hole admin password: \" PIHOLE_PASSWORD\necho \"\"\n\nread -s -p \"Enter n8n admin password: \" N8N_PASSWORD\necho \"\"\n\n# Get local IP\nLOCAL_IP=$(hostname -I | awk '{print $1}')\necho -e \"\\n${GREEN}Detected IP: ${LOCAL_IP}${NC}\"\n\n# =============================================================\n# STEP 1 — SYSTEM UPDATE\n# =============================================================\n\necho -e \"\\n${YELLOW}[1/9] Updating system packages...${NC}\"\nsudo apt update && sudo apt upgrade -y\nsudo apt install -y curl wget git nano htop\n\n# =============================================================\n# STEP 2 — INSTALL DOCKER\n# =============================================================\n\necho -e \"\\n${YELLOW}[2/9] Installing Docker...${NC}\"\ncurl -sSL https://get.docker.com | sh\nsudo usermod -aG docker $USER\n\n# Disable IPv6 for Docker to avoid image pull failures\nsudo mkdir -p /etc/docker\nsudo tee /etc/docker/daemon.json > /dev/null <<EOF\n{\n  \"ipv6\": false,\n  \"ip\": \"0.0.0.0\"\n}\nEOF\nsudo systemctl restart docker\nsleep 3\n\necho -e \"${GREEN}Docker installed successfully${NC}\"\n\n# =============================================================\n# STEP 3 — INSTALL TAILSCALE\n# =============================================================\n\necho -e \"\\n${YELLOW}[3/9] Installing Tailscale...${NC}\"\ncurl -fsSL https://tailscale.com/install.sh | sh\necho -e \"${GREEN}Tailscale installed.${NC}\"\necho -e \"${YELLOW}Opening Tailscale authentication — copy the URL below into your browser:${NC}\"\nsudo tailscale up\n\n# =============================================================\n# STEP 4 — INSTALL NETDATA\n# =============================================================\n\necho -e \"\\n${YELLOW}[4/9] Installing Netdata...${NC}\"\ncurl https://get.netdata.cloud/kickstart.sh > /tmp/netdata-kickstart.sh\nsudo sh /tmp/netdata-kickstart.sh --non-interactive\necho -e \"${GREEN}Netdata installed${NC}\"\n\n# =============================================================\n# STEP 5 — CREATE HOMELAB DIRECTORY\n# =============================================================\n\necho -e \"\\n${YELLOW}[5/9] Creating homelab directory...${NC}\"\nmkdir -p ~/homelab\n\n# =============================================================\n# STEP 6 — CREATE DOCKER COMPOSE FILE\n# =============================================================\n\necho -e \"\\n${YELLOW}[6/9] Creating Docker Compose stack...${NC}\"\n\ncat > ~/homelab/docker-compose.yml << COMPOSE\nservices:\n\n  # --- Homepage - Service Dashboard (set up first!) ---\n  homepage:\n    image: ghcr.io/gethomepage/homepage:latest\n    container_name: homepage\n    restart: unless-stopped\n    ports:\n      - \"3005:3000\"\n    volumes:\n      - homepage_config:/app/config\n      - /var/run/docker.sock:/var/run/docker.sock\n    environment:\n      - TZ=Your/Timezone\n      - HOMEPAGE_ALLOWED_HOSTS=${HOSTNAME}.local:3005,${LOCAL_IP}:3005\n\n  # --- Portainer - Docker Management UI ---\n  portainer:\n    image: portainer/portainer-ce:2.21.5-alpine\n    container_name: portainer\n    restart: always\n    ports:\n      - \"8000:8000\"\n      - \"9443:9443\"\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n      - portainer_data:/data\n\n  # --- Watchtower - Auto Update Containers ---\n  watchtower:\n    image: containrrr/watchtower\n    container_name: watchtower\n    restart: always\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    environment:\n      - WATCHTOWER_CLEANUP=true\n      - WATCHTOWER_SCHEDULE=0 0 4 * * *\n      - TZ=Your/Timezone\n\n  # --- Home Assistant - Smart Home Hub ---\n  homeassistant:\n    image: ghcr.io/home-assistant/home-assistant:stable\n    container_name: homeassistant\n    restart: unless-stopped\n    network_mode: host\n    environment:\n      - TZ=Your/Timezone\n    volumes:\n      - homeassistant_config:/config\n    privileged: true\n\n  # --- Nginx Proxy Manager - Reverse Proxy ---\n  nginx-proxy-manager:\n    image: jc21/nginx-proxy-manager:latest\n    container_name: nginx-proxy-manager\n    restart: unless-stopped\n    ports:\n      - \"80:80\"\n      - \"81:81\"\n      - \"443:443\"\n    volumes:\n      - npm_data:/data\n      - npm_letsencrypt:/etc/letsencrypt\n\n  # --- n8n - Automation Workflows ---\n  n8n:\n    image: n8nio/n8n:latest\n    container_name: n8n\n    restart: unless-stopped\n    ports:\n      - \"5678:5678\"\n    environment:\n      - TZ=Your/Timezone\n      - N8N_BASIC_AUTH_ACTIVE=true\n      - N8N_BASIC_AUTH_USER=admin\n      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}\n      - N8N_HOST=0.0.0.0\n      - WEBHOOK_URL=http://${HOSTNAME}.local:5678\n    volumes:\n      - n8n_data:/home/node/.n8n\n\n  # --- Pi-hole - Network Ad Blocking ---\n  pihole:\n    image: pihole/pihole:latest\n    container_name: pihole\n    restart: always\n    ports:\n      - \"53:53/tcp\"\n      - \"53:53/udp\"\n      - \"8053:80\"\n    environment:\n      - TZ=Your/Timezone\n      - WEBPASSWORD=${PIHOLE_PASSWORD}\n    volumes:\n      - pihole_data:/etc/pihole\n      - pihole_dnsmasq:/etc/dnsmasq.d\n    dns:\n      - 127.0.0.1\n      - 1.1.1.1\n\n  # --- Vaultwarden - Self Hosted Password Manager ---\n  vaultwarden:\n    image: vaultwarden/server:latest\n    container_name: vaultwarden\n    restart: unless-stopped\n    ports:\n      - \"8080:80\"\n    environment:\n      - TZ=Your/Timezone\n      - WEBSOCKET_ENABLED=true\n    volumes:\n      - vaultwarden_data:/data\n\n  # --- Uptime Kuma - Service Monitoring ---\n  uptime-kuma:\n    image: louislam/uptime-kuma:latest\n    container_name: uptime-kuma\n    restart: unless-stopped\n    ports:\n      - \"3001:3001\"\n    volumes:\n      - uptime_kuma_data:/app/data\n\n  # --- Stirling PDF - PDF Tools ---\n  stirling-pdf:\n    image: frooodle/s-pdf:latest\n    container_name: stirling-pdf\n    restart: unless-stopped\n    ports:\n      - \"8888:8080\"\n    volumes:\n      - stirling_data:/configs\n\n  # --- Nextcloud - Self Hosted Cloud Storage ---\n  nextcloud:\n    image: nextcloud:latest\n    container_name: nextcloud\n    restart: unless-stopped\n    ports:\n      - \"8181:80\"\n    environment:\n      - TZ=Your/Timezone\n      - MYSQL_HOST=nextcloud-db\n      - MYSQL_DATABASE=nextcloud\n      - MYSQL_USER=nextcloud\n      - MYSQL_PASSWORD=nextcloud_password\n    volumes:\n      - nextcloud_data:/var/www/html\n    depends_on:\n      - nextcloud-db\n\n  # --- Nextcloud Database ---\n  nextcloud-db:\n    image: mariadb:10.11\n    container_name: nextcloud-db\n    restart: unless-stopped\n    environment:\n      - MYSQL_ROOT_PASSWORD=root_password\n      - MYSQL_DATABASE=nextcloud\n      - MYSQL_USER=nextcloud\n      - MYSQL_PASSWORD=nextcloud_password\n    volumes:\n      - nextcloud_db_data:/var/lib/mysql\n\n  # --- Ollama - Local LLM Engine ---\n  ollama:\n    image: ollama/ollama:latest\n    container_name: ollama\n    restart: unless-stopped\n    ports:\n      - \"11434:11434\"\n    volumes:\n      - ollama_data:/root/.ollama\n    environment:\n      - TZ=Your/Timezone\n\n  # --- Open WebUI - Chat Interface for Ollama ---\n  open-webui:\n    image: ghcr.io/open-webui/open-webui:main\n    container_name: open-webui\n    restart: unless-stopped\n    ports:\n      - \"3000:8080\"\n    environment:\n      - OLLAMA_BASE_URL=http://ollama:11434\n      - TZ=Your/Timezone\n    volumes:\n      - open_webui_data:/app/backend/data\n    depends_on:\n      - ollama\n\nvolumes:\n  homepage_config:\n  portainer_data:\n  homeassistant_config:\n  npm_data:\n  npm_letsencrypt:\n  n8n_data:\n  pihole_data:\n  pihole_dnsmasq:\n  vaultwarden_data:\n  uptime_kuma_data:\n  stirling_data:\n  nextcloud_data:\n  nextcloud_db_data:\n  ollama_data:\n  open_webui_data:\nCOMPOSE\n\necho -e \"${GREEN}Docker Compose file created${NC}\"\n\n# =============================================================\n# STEP 7 — CONFIGURE HOMEPAGE DASHBOARD\n# Note: Using sudo docker because usermod group change requires\n# a new login session to take effect — sudo bypasses this.\n# =============================================================\n\necho -e \"\\n${YELLOW}[7/9] Configuring Homepage dashboard...${NC}\"\n\nsudo docker compose -f ~/homelab/docker-compose.yml pull homepage\nsudo docker compose -f ~/homelab/docker-compose.yml up -d homepage\nsleep 8\n\nVOL_PATH=$(sudo docker inspect homepage --format '{{ range .Mounts }}{{ if eq .Destination \"/app/config\" }}{{ .Source }}{{ end }}{{ end }}')\n\nsudo tee \"${VOL_PATH}/services.yaml\" > /dev/null << EOF\n- Management:\n    - Portainer:\n        href: https://${LOCAL_IP}:9443\n        description: Docker Management\n        icon: portainer.png\n    - Nginx Proxy Manager:\n        href: http://${LOCAL_IP}:81\n        description: Reverse Proxy\n        icon: nginx-proxy-manager.png\n\n- Automation:\n    - n8n:\n        href: http://${LOCAL_IP}:5678\n        description: Workflow Automation\n        icon: n8n.png\n    - Home Assistant:\n        href: http://${LOCAL_IP}:8123\n        description: Smart Home Hub\n        icon: home-assistant.png\n\n- Monitoring:\n    - Uptime Kuma:\n        href: http://${LOCAL_IP}:3001\n        description: Service Monitoring\n        icon: uptime-kuma.png\n    - Netdata:\n        href: http://${LOCAL_IP}:19999\n        description: System Performance\n        icon: netdata.png\n    - Pi-hole:\n        href: http://${LOCAL_IP}:8053/admin\n        description: Ad Blocking\n        icon: pi-hole.png\n\n- Storage and Tools:\n    - Nextcloud:\n        href: http://${LOCAL_IP}:8181\n        description: Self Hosted Cloud\n        icon: nextcloud.png\n    - Vaultwarden:\n        href: http://${LOCAL_IP}:8080\n        description: Password Manager\n        icon: vaultwarden.png\n    - Stirling PDF:\n        href: http://${LOCAL_IP}:8888\n        description: PDF Tools\n        icon: stirling-pdf.png\n\n- AI:\n    - Open WebUI:\n        href: http://${LOCAL_IP}:3000\n        description: Local AI Chat\n        icon: ollama.png\nEOF\n\nsudo docker restart homepage\necho -e \"${GREEN}Homepage configured${NC}\"\n\n# =============================================================\n# STEP 8 — PULL AND START ALL SERVICES\n# =============================================================\n\necho -e \"\\n${YELLOW}[8/9] Pulling and starting all services (this may take a while)...${NC}\"\ncd ~/homelab && sudo docker compose pull && sudo docker compose up -d\n\n# =============================================================\n# STEP 9 — DONE\n# =============================================================\n\necho -e \"\\n${YELLOW}[9/9] Setup complete!${NC}\"\necho \"\"\necho -e \"${GREEN}=================================================${NC}\"\necho -e \"${GREEN}  Pi Homelab is ready!${NC}\"\necho -e \"${GREEN}=================================================${NC}\"\necho \"\"\necho -e \"${BLUE}Open your dashboard first:${NC}\"\necho -e \"  http://${LOCAL_IP}:3005  (bookmark this!)\"\necho \"\"\necho -e \"All services:\"\necho -e \"  http://${LOCAL_IP}:3005        — Homepage Dashboard\"\necho -e \"  http://${LOCAL_IP}:8123        — Home Assistant\"\necho -e \"  http://${LOCAL_IP}:5678        — n8n Automation\"\necho -e \"  http://${LOCAL_IP}:81          — Nginx Proxy Manager\"\necho -e \"  http://${LOCAL_IP}:8080        — Vaultwarden\"\necho -e \"  http://${LOCAL_IP}:3001        — Uptime Kuma\"\necho -e \"  http://${LOCAL_IP}:8181        — Nextcloud\"\necho -e \"  http://${LOCAL_IP}:8888        — Stirling PDF\"\necho -e \"  http://${LOCAL_IP}:3000        — Open WebUI (AI)\"\necho -e \"  http://${LOCAL_IP}:8053/admin  — Pi-hole\"\necho -e \"  http://${LOCAL_IP}:19999       — Netdata\"\necho -e \"  https://${LOCAL_IP}:9443       — Portainer\"\necho \"\"\necho -e \"${YELLOW}Next steps:${NC}\"\necho \"  1. Bookmark http://${LOCAL_IP}:3005 as your homelab dashboard\"\necho \"  2. Set up Nginx Proxy Manager at http://${LOCAL_IP}:81 (create your own credentials on first login)\"\necho \"  3. Point your router DNS to ${LOCAL_IP} to enable Pi-hole network-wide\"\necho \"  4. Pull an AI model: sudo docker exec -it ollama ollama pull llama3.2\"\necho \"  5. Log out and back in so you can run docker without sudo\"\necho \"  6. Tailscale IP for remote access: $(tailscale ip -4 2>/dev/null || echo 'run: tailscale ip -4')\"\necho \"\"\necho -e \"${GREEN}Enjoy your homelab!${NC}\"\n
+#!/bin/bash
+
+# =============================================================
+# Pi Homelab Setup Script
+# Automated Raspberry Pi 5 home server setup
+# https://github.com/Elhard1/pi-homelab
+# =============================================================
+
+set -e
+
+# Colours
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Checkpoint file — tracks completed steps
+CHECKPOINT_FILE="$HOME/.pi-homelab-setup"
+
+# Helper to check if a step is already done
+step_done() {
+  grep -q "^$1$" "$CHECKPOINT_FILE" 2>/dev/null
+}
+
+# Helper to mark a step as done
+mark_done() {
+  echo "$1" >> "$CHECKPOINT_FILE"
+}
+
+# Helper to print skip message
+skip() {
+  echo -e "${GREEN}[SKIP] $1 already complete${NC}"
+}
+
+# Install figlet for banner rendering
+sudo apt-get install -y figlet > /dev/null 2>&1
+
+clear
+echo -e "${BLUE}"
+figlet -f slant "Pi Homelab"
+echo -e "${NC}"
+echo -e "${GREEN}  Raspberry Pi 5 Home Server Setup${NC}"
+echo "  ================================================="
+echo ""
+
+# Show resume status if checkpoint file exists
+if [ -f "$CHECKPOINT_FILE" ]; then
+  echo -e "${YELLOW}Resuming previous setup. Completed steps will be skipped.${NC}"
+  echo -e "${YELLOW}To start fresh, run: rm ~/.pi-homelab-setup${NC}"
+  echo ""
+fi
+
+# =============================================================
+# COLLECT USER INPUT
+# =============================================================
+
+read -p "Enter your hostname (default: homelab): " HOSTNAME
+HOSTNAME=${HOSTNAME:-homelab}
+
+# Only ask for passwords if steps that need them aren't done yet
+if ! step_done "PIHOLE" || ! step_done "N8N"; then
+  read -s -p "Enter Pi-hole admin password: " PIHOLE_PASSWORD
+  echo ""
+  read -s -p "Enter n8n admin password: " N8N_PASSWORD
+  echo ""
+fi
+
+# Get local IP
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+echo -e "\n${GREEN}Detected IP: ${LOCAL_IP}${NC}"
+
+# =============================================================
+# STEP 1 — SYSTEM UPDATE
+# =============================================================
+
+if step_done "STEP1"; then
+  skip "System update"
+else
+  echo -e "\n${YELLOW}[1/9] Updating system packages...${NC}"
+  sudo apt update && sudo apt upgrade -y
+  sudo apt install -y curl wget git nano htop
+  mark_done "STEP1"
+  echo -e "${GREEN}System updated${NC}"
+fi
+
+# =============================================================
+# STEP 2 — INSTALL DOCKER
+# =============================================================
+
+if step_done "STEP2"; then
+  skip "Docker"
+else
+  echo -e "\n${YELLOW}[2/9] Installing Docker...${NC}"
+  curl -sSL https://get.docker.com | sh
+  sudo usermod -aG docker $USER
+
+  # Disable IPv6 for Docker to avoid image pull failures
+  sudo mkdir -p /etc/docker
+  sudo tee /etc/docker/daemon.json > /dev/null <<EOF
+{
+  "ipv6": false,
+  "ip": "0.0.0.0"
+}
+EOF
+  sudo systemctl restart docker
+  sleep 3
+  mark_done "STEP2"
+  echo -e "${GREEN}Docker installed successfully${NC}"
+fi
+
+# =============================================================
+# STEP 3 — INSTALL TAILSCALE
+# =============================================================
+
+if step_done "STEP3"; then
+  skip "Tailscale"
+else
+  echo -e "\n${YELLOW}[3/9] Installing Tailscale...${NC}"
+  curl -fsSL https://tailscale.com/install.sh | sh
+  echo -e "${GREEN}Tailscale installed.${NC}"
+  echo -e "${YELLOW}Opening Tailscale authentication — copy the URL below into your browser:${NC}"
+  sudo tailscale up
+  mark_done "STEP3"
+fi
+
+# =============================================================
+# STEP 4 — INSTALL NETDATA
+# =============================================================
+
+if step_done "STEP4"; then
+  skip "Netdata"
+else
+  echo -e "\n${YELLOW}[4/9] Installing Netdata...${NC}"
+  curl https://get.netdata.cloud/kickstart.sh > /tmp/netdata-kickstart.sh
+  sudo sh /tmp/netdata-kickstart.sh --non-interactive
+  mark_done "STEP4"
+  echo -e "${GREEN}Netdata installed${NC}"
+fi
+
+# =============================================================
+# STEP 5 — CREATE HOMELAB DIRECTORY
+# =============================================================
+
+if step_done "STEP5"; then
+  skip "Homelab directory"
+else
+  echo -e "\n${YELLOW}[5/9] Creating homelab directory...${NC}"
+  mkdir -p ~/homelab
+  mark_done "STEP5"
+fi
+
+# =============================================================
+# STEP 6 — CREATE DOCKER COMPOSE FILE
+# =============================================================
+
+if step_done "STEP6"; then
+  skip "Docker Compose file (preserving existing)"
+else
+  echo -e "\n${YELLOW}[6/9] Creating Docker Compose stack...${NC}"
+
+  cat > ~/homelab/docker-compose.yml << COMPOSE
+services:
+
+  # --- Homepage - Service Dashboard (set up first!) ---
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    volumes:
+      - homepage_config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - TZ=Your/Timezone
+      - HOMEPAGE_ALLOWED_HOSTS=${HOSTNAME}.local:3005,${LOCAL_IP}:3005
+
+  # --- Portainer - Docker Management UI ---
+  portainer:
+    image: portainer/portainer-ce:2.21.5-alpine
+    container_name: portainer
+    restart: always
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+  # --- Watchtower - Auto Update Containers ---
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *
+      - TZ=Your/Timezone
+
+  # --- Home Assistant - Smart Home Hub ---
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=Your/Timezone
+    volumes:
+      - homeassistant_config:/config
+    privileged: true
+
+  # --- Nginx Proxy Manager - Reverse Proxy ---
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "81:81"
+      - "443:443"
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+
+  # --- n8n - Automation Workflows ---
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - TZ=Your/Timezone
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD}
+      - N8N_HOST=0.0.0.0
+      - WEBHOOK_URL=http://${HOSTNAME}.local:5678
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # --- Pi-hole - Network Ad Blocking ---
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: always
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8053:80"
+    environment:
+      - TZ=Your/Timezone
+      - WEBPASSWORD=${PIHOLE_PASSWORD}
+    volumes:
+      - pihole_data:/etc/pihole
+      - pihole_dnsmasq:/etc/dnsmasq.d
+    dns:
+      - 127.0.0.1
+      - 1.1.1.1
+
+  # --- Vaultwarden - Self Hosted Password Manager ---
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      - TZ=Your/Timezone
+      - WEBSOCKET_ENABLED=true
+    volumes:
+      - vaultwarden_data:/data
+
+  # --- Uptime Kuma - Service Monitoring ---
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+
+  # --- Stirling PDF - PDF Tools ---
+  stirling-pdf:
+    image: frooodle/s-pdf:latest
+    container_name: stirling-pdf
+    restart: unless-stopped
+    ports:
+      - "8888:8080"
+    volumes:
+      - stirling_data:/configs
+
+  # --- Nextcloud - Self Hosted Cloud Storage ---
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    restart: unless-stopped
+    ports:
+      - "8181:80"
+    environment:
+      - TZ=Your/Timezone
+      - MYSQL_HOST=nextcloud-db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud_password
+    volumes:
+      - nextcloud_data:/var/www/html
+    depends_on:
+      - nextcloud-db
+
+  # --- Nextcloud Database ---
+  nextcloud-db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD=nextcloud_password
+    volumes:
+      - nextcloud_db_data:/var/lib/mysql
+
+  # --- Ollama - Local LLM Engine ---
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - TZ=Your/Timezone
+
+  # --- Open WebUI - Chat Interface for Ollama ---
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - TZ=Your/Timezone
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      - ollama
+
+volumes:
+  homepage_config:
+  portainer_data:
+  homeassistant_config:
+  npm_data:
+  npm_letsencrypt:
+  n8n_data:
+  pihole_data:
+  pihole_dnsmasq:
+  vaultwarden_data:
+  uptime_kuma_data:
+  stirling_data:
+  nextcloud_data:
+  nextcloud_db_data:
+  ollama_data:
+  open_webui_data:
+COMPOSE
+
+  mark_done "STEP6"
+  echo -e "${GREEN}Docker Compose file created${NC}"
+fi
+
+# =============================================================
+# STEP 7 — CONFIGURE HOMEPAGE DASHBOARD
+# Note: Using sudo docker because usermod group change requires
+# a new login session to take effect — sudo bypasses this.
+# =============================================================
+
+if step_done "STEP7"; then
+  skip "Homepage dashboard config"
+else
+  echo -e "\n${YELLOW}[7/9] Configuring Homepage dashboard...${NC}"
+
+  sudo docker compose -f ~/homelab/docker-compose.yml pull homepage
+  sudo docker compose -f ~/homelab/docker-compose.yml up -d homepage
+  sleep 8
+
+  VOL_PATH=$(sudo docker inspect homepage --format '{{ range .Mounts }}{{ if eq .Destination "/app/config" }}{{ .Source }}{{ end }}{{ end }}')
+
+  sudo tee "${VOL_PATH}/services.yaml" > /dev/null << EOF
+- Management:
+    - Portainer:
+        href: https://${LOCAL_IP}:9443
+        description: Docker Management
+        icon: portainer.png
+    - Nginx Proxy Manager:
+        href: http://${LOCAL_IP}:81
+        description: Reverse Proxy
+        icon: nginx-proxy-manager.png
+
+- Automation:
+    - n8n:
+        href: http://${LOCAL_IP}:5678
+        description: Workflow Automation
+        icon: n8n.png
+    - Home Assistant:
+        href: http://${LOCAL_IP}:8123
+        description: Smart Home Hub
+        icon: home-assistant.png
+
+- Monitoring:
+    - Uptime Kuma:
+        href: http://${LOCAL_IP}:3001
+        description: Service Monitoring
+        icon: uptime-kuma.png
+    - Netdata:
+        href: http://${LOCAL_IP}:19999
+        description: System Performance
+        icon: netdata.png
+    - Pi-hole:
+        href: http://${LOCAL_IP}:8053/admin
+        description: Ad Blocking
+        icon: pi-hole.png
+
+- Storage and Tools:
+    - Nextcloud:
+        href: http://${LOCAL_IP}:8181
+        description: Self Hosted Cloud
+        icon: nextcloud.png
+    - Vaultwarden:
+        href: http://${LOCAL_IP}:8080
+        description: Password Manager
+        icon: vaultwarden.png
+    - Stirling PDF:
+        href: http://${LOCAL_IP}:8888
+        description: PDF Tools
+        icon: stirling-pdf.png
+
+- AI:
+    - Open WebUI:
+        href: http://${LOCAL_IP}:3000
+        description: Local AI Chat
+        icon: ollama.png
+EOF
+
+  sudo docker restart homepage
+  mark_done "STEP7"
+  echo -e "${GREEN}Homepage configured${NC}"
+fi
+
+# =============================================================
+# STEP 8 — PULL AND START ALL SERVICES
+# =============================================================
+
+if step_done "STEP8"; then
+  skip "Docker stack"
+else
+  echo -e "\n${YELLOW}[8/9] Pulling and starting all services (this may take a while)...${NC}"
+  cd ~/homelab && sudo docker compose pull && sudo docker compose up -d
+  mark_done "STEP8"
+fi
+
+# =============================================================
+# STEP 9 — DONE
+# =============================================================
+
+mark_done "STEP9"
+echo -e "\n${YELLOW}[9/9] Setup complete!${NC}"
+echo ""
+echo -e "${GREEN}=================================================${NC}"
+echo -e "${GREEN}  Pi Homelab is ready!${NC}"
+echo -e "${GREEN}=================================================${NC}"
+echo ""
+echo -e "${BLUE}Open your dashboard first:${NC}"
+echo -e "  http://${LOCAL_IP}:3005  (bookmark this!)"
+echo ""
+echo -e "All services:"
+echo -e "  http://${LOCAL_IP}:3005        — Homepage Dashboard"
+echo -e "  http://${LOCAL_IP}:8123        — Home Assistant"
+echo -e "  http://${LOCAL_IP}:5678        — n8n Automation"
+echo -e "  http://${LOCAL_IP}:81          — Nginx Proxy Manager"
+echo -e "  http://${LOCAL_IP}:8080        — Vaultwarden"
+echo -e "  http://${LOCAL_IP}:3001        — Uptime Kuma"
+echo -e "  http://${LOCAL_IP}:8181        — Nextcloud"
+echo -e "  http://${LOCAL_IP}:8888        — Stirling PDF"
+echo -e "  http://${LOCAL_IP}:3000        — Open WebUI (AI)"
+echo -e "  http://${LOCAL_IP}:8053/admin  — Pi-hole"
+echo -e "  http://${LOCAL_IP}:19999       — Netdata"
+echo -e "  https://${LOCAL_IP}:9443       — Portainer"
+echo ""
+echo -e "${YELLOW}Next steps:${NC}"
+echo "  1. Bookmark http://${LOCAL_IP}:3005 as your homelab dashboard"
+echo "  2. Set up Nginx Proxy Manager at http://${LOCAL_IP}:81 (create your own credentials on first login)"
+echo "  3. Point your router DNS to ${LOCAL_IP} to enable Pi-hole network-wide"
+echo "  4. Pull an AI model: sudo docker exec -it ollama ollama pull llama3.2"
+echo "  5. Log out and back in so you can run docker without sudo"
+echo "  6. Tailscale IP for remote access: $(tailscale ip -4 2>/dev/null || echo 'run: tailscale ip -4')"
+echo ""
+echo -e "${GREEN}Enjoy your homelab!${NC}"
