@@ -1,0 +1,4 @@
+/srv/homelab/state/home-assistant/home-assistant_v2.db-shm
+/srv/homelab/state/home-assistant/home-assistant_v2.db-wal
+/srv/homelab/state/home-assistant/*.log
+/srv/homelab/state/home-assistant/.cloud

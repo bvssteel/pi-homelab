@@ -1,11 +1,15 @@
 # Environment files
 .env
 *.env
+restic.env
 
 # Local config overrides
 local/
 
-# Docker volumes (don't commit data)
+# Runtime logs
+*.log
+
+# Docker volumes and local runtime data
 volumes/
 
 # OS files

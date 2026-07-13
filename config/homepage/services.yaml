@@ -1,53 +1,21 @@
-- Management:
-    - Portainer:
-        href: https://YOUR_PI_IP:9443
-        description: Docker Management
-        icon: portainer.png
-    - Nginx Proxy Manager:
-        href: http://YOUR_PI_IP:81
-        description: Reverse Proxy
-        icon: nginx-proxy-manager.png
-
-- Automation:
-    - n8n:
-        href: http://YOUR_PI_IP:5678
-        description: Workflow Automation
-        icon: n8n.png
+- Core:
     - Home Assistant:
-        href: http://YOUR_PI_IP:8123
-        description: Smart Home Hub
+        href: http://homelab.local:8123
+        description: Smart home hub
         icon: home-assistant.png
+        ping: http://homelab.local:8123
+    - Homepage:
+        href: http://homelab.local:3005
+        description: Homelab dashboard
+        icon: homepage.png
+        ping: http://homelab.local:3005
 
-- Monitoring:
-    - Uptime Kuma:
-        href: http://YOUR_PI_IP:3001
-        description: Service Monitoring
-        icon: uptime-kuma.png
-    - Netdata:
-        href: http://YOUR_PI_IP:19999
-        description: System Performance
-        icon: netdata.png
-    - Pi-hole:
-        href: http://YOUR_PI_IP:8053/admin
-        description: Ad Blocking
-        icon: pi-hole.png
-
-- Storage and Tools:
-    - Nextcloud:
-        href: http://YOUR_PI_IP:8181
-        description: Self Hosted Cloud
-        icon: nextcloud.png
-    - Vaultwarden:
-        href: http://YOUR_PI_IP:8080
-        description: Password Manager
-        icon: vaultwarden.png
-    - Stirling PDF:
-        href: http://YOUR_PI_IP:8888
-        description: PDF Tools
-        icon: stirling-pdf.png
-
-- AI:
-    - Open WebUI:
-        href: http://YOUR_PI_IP:3000
-        description: Local AI Chat
-        icon: ollama.png
+- Operations:
+    - Tailscale:
+        href: https://login.tailscale.com/admin/machines
+        description: Private remote access
+        icon: tailscale.png
+    - Repository:
+        href: https://github.com/bvssteel/pi-homelab
+        description: Infrastructure source of truth
+        icon: github.png

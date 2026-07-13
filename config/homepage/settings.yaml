@@ -1,0 +1,12 @@
+title: Pi Homelab
+cardBlur: sm
+theme: dark
+color: slate
+headerStyle: clean
+layout:
+  Core:
+    style: row
+    columns: 2
+  Operations:
+    style: row
+    columns: 2
