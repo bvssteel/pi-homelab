@@ -25,10 +25,19 @@
     name: "{{ homelab_base_packages }}"
     state: present
 
-- name: Ensure French locale is generated
-  community.general.locale_gen:
-    name: "{{ homelab_locale }}"
+- name: Enable French locale in locale.gen
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    regexp: "^#?\\s*{{ homelab_locale | regex_escape }}\\s+UTF-8$"
+    line: "{{ homelab_locale }} UTF-8"
     state: present
+  register: locale_gen_config
+
+- name: Generate locales
+  ansible.builtin.command:
+    cmd: locale-gen
+  when: locale_gen_config.changed
+  changed_when: true
 
 - name: Configure system locale
   ansible.builtin.copy:
