@@ -1,0 +1,30 @@
+---
+homelab_hostname: homeserver
+homelab_timezone: Europe/Paris
+homelab_locale: en_US.UTF-8
+
+homelab_admin_user: "{{ ansible_user_id }}"
+
+homelab_repo_url: https://github.com/bvssteel/pi-homelab.git
+homelab_repo_branch: v0.1-host-config
+homelab_repo_dir: /opt/pi-homelab
+
+homelab_root_dir: /srv/homelab
+homelab_state_dir: /srv/homelab/state
+homelab_backup_dir: /srv/homelab/backups
+homelab_log_dir: /srv/homelab/logs
+
+homelab_base_packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - htop
+  - jq
+  - nano
+  - restic
+  - rclone
+  - unattended-upgrades
+
+homelab_enable_unattended_upgrades: true
+homelab_deploy_stack: true
