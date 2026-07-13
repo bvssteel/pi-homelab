@@ -1,0 +1,18 @@
+title: Pi Homelab
+background:
+  image: https://images.unsplash.com/photo-1518005020951-eccb494ad742
+  blur: sm
+  saturate: 50
+  brightness: 50
+  opacity: 50
+cardBlur: sm
+theme: dark
+color: slate
+headerStyle: clean
+layout:
+  Core:
+    style: row
+    columns: 2
+  Operations:
+    style: row
+    columns: 2
