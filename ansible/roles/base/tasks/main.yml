@@ -25,6 +25,22 @@
     name: "{{ homelab_base_packages }}"
     state: present
 
+- name: Ensure French locale is generated
+  community.general.locale_gen:
+    name: "{{ homelab_locale }}"
+    state: present
+
+- name: Configure system locale
+  ansible.builtin.copy:
+    dest: /etc/default/locale
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      LANG={{ homelab_locale }}
+      LANGUAGE={{ homelab_language }}
+      LC_ALL={{ homelab_locale }}
+
 - name: Ensure core services are enabled
   ansible.builtin.systemd_service:
     name: "{{ item }}"
