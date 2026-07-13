@@ -1,12 +1,15 @@
 ---
 homelab_hostname: homeserver
 homelab_timezone: Europe/Paris
-homelab_locale: en_US.UTF-8
+homelab_locale: fr_FR.UTF-8
+homelab_language: fr_FR:fr
 
 homelab_admin_user: "{{ ansible_user_id }}"
+homelab_admin_shell: /usr/bin/zsh
 
 homelab_repo_url: https://github.com/bvssteel/pi-homelab.git
-homelab_repo_branch: v0.1-host-config
+# Override at runtime with: -e homelab_repo_branch=<branch>
+homelab_repo_branch: main
 homelab_repo_dir: /opt/pi-homelab
 
 homelab_root_dir: /srv/homelab
@@ -21,10 +24,14 @@ homelab_base_packages:
   - gnupg
   - htop
   - jq
+  - locales
   - nano
   - restic
   - rclone
   - unattended-upgrades
+  - zsh
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
 
 homelab_enable_unattended_upgrades: true
 homelab_deploy_stack: true
