@@ -1,0 +1,48 @@
+# Managed by Ansible. Local customizations belong in ~/.zshrc.local.
+
+export LANG="{{ homelab_locale }}"
+export LC_ALL="{{ homelab_locale }}"
+export EDITOR="nano"
+export VISUAL="$EDITOR"
+
+HISTFILE="$HOME/.zsh_history"
+HISTSIZE=10000
+SAVEHIST=10000
+
+setopt AUTO_CD
+setopt AUTO_PUSHD
+setopt HIST_IGNORE_ALL_DUPS
+setopt HIST_REDUCE_BLANKS
+setopt INC_APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt INTERACTIVE_COMMENTS
+
+bindkey -e
+
+# Useful defaults.
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias grep='grep --color=auto'
+alias dc='docker compose'
+alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+alias homelab='cd {{ homelab_repo_dir }}'
+
+# Debian packages provide these plugins system-wide.
+if [ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
+  source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+fi
+
+if [ -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
+  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+fi
+
+# Compact prompt with user, host, directory and git branch when available.
+autoload -Uz colors && colors
+autoload -Uz vcs_info
+precmd() { vcs_info }
+zstyle ':vcs_info:git:*' formats ' %F{yellow}(%b)%f'
+setopt PROMPT_SUBST
+PROMPT='%F{green}%n@%m%f:%F{blue}%~%f${vcs_info_msg_0_} %# '
+
+[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
