@@ -25,7 +25,7 @@ alias la='ls -A'
 alias l='ls -CF'
 alias grep='grep --color=auto'
 alias dc='docker compose'
-alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+alias dps='docker ps --format "table {% raw %}{{.Names}}\t{{.Status}}\t{{.Ports}}{% endraw %}"'
 alias homelab='cd {{ homelab_repo_dir }}'
 
 # Debian packages provide these plugins system-wide.
