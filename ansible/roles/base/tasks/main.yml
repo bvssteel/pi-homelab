@@ -3,10 +3,17 @@
   ansible.builtin.hostname:
     name: "{{ homelab_hostname }}"
 
+- name: Read current timezone
+  ansible.builtin.command:
+    cmd: timedatectl show --property=Timezone --value
+  register: current_timezone
+  changed_when: false
+
 - name: Set timezone
   ansible.builtin.command:
     cmd: "timedatectl set-timezone {{ homelab_timezone }}"
-  changed_when: ansible_date_time.tz != homelab_timezone
+  when: current_timezone.stdout != homelab_timezone
+  changed_when: true
 
 - name: Update APT cache
   ansible.builtin.apt:
