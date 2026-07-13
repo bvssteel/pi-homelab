@@ -1,0 +1,28 @@
+---
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ homelab_hostname }}"
+
+- name: Set timezone
+  ansible.builtin.command:
+    cmd: "timedatectl set-timezone {{ homelab_timezone }}"
+  changed_when: ansible_date_time.tz != homelab_timezone
+
+- name: Update APT cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ homelab_base_packages }}"
+    state: present
+
+- name: Ensure core services are enabled
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - systemd-timesyncd
+    - ssh
