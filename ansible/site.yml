@@ -6,6 +6,7 @@
 
   roles:
     - base
+    - shell
     - storage
     - docker
     - tailscale
