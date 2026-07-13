@@ -1,0 +1,23 @@
+---
+- name: Read administrator account
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ homelab_admin_user }}"
+
+- name: Set administrator home directory fact
+  ansible.builtin.set_fact:
+    homelab_admin_home: "{{ ansible_facts.getent_passwd[homelab_admin_user][4] }}"
+
+- name: Set Zsh as the administrator default shell
+  ansible.builtin.user:
+    name: "{{ homelab_admin_user }}"
+    shell: "{{ homelab_admin_shell }}"
+
+- name: Install managed Zsh configuration
+  ansible.builtin.template:
+    src: zshrc.j2
+    dest: "{{ homelab_admin_home }}/.zshrc"
+    owner: "{{ homelab_admin_user }}"
+    group: "{{ homelab_admin_user }}"
+    mode: "0644"
+    backup: true
