@@ -17,5 +17,5 @@ services:
       TZ: ${TZ:-Europe/Paris}
       HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS:-homelab.local:3005,localhost:3005,127.0.0.1:3005}
     volumes:
-      - ./config/homepage:/app/config:ro
+      - ./config/homepage:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
