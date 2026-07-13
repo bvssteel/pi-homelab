@@ -1,0 +1,13 @@
+---
+- name: Configure Raspberry Pi homelab host
+  hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - base
+    - storage
+    - docker
+    - tailscale
+    - updates
+    - homelab
