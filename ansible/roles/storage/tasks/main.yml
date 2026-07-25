@@ -1,0 +1,25 @@
+---
+- name: Create homelab root directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ homelab_admin_user }}"
+    group: "{{ homelab_admin_group }}"
+    mode: "{{ item.mode | default('0750') }}"
+  loop:
+    - path: "{{ homelab_root_dir }}"
+    - path: "{{ homelab_config_dir }}"
+    - path: "{{ homelab_state_dir }}"
+    - path: "{{ homelab_data_dir }}"
+    - path: "{{ homelab_backup_dir }}"
+    - path: "{{ homelab_log_dir }}"
+
+- name: Create application state directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ homelab_admin_user }}"
+    group: "{{ homelab_admin_group }}"
+    mode: "0750"
+  loop:
+    - "{{ homelab_state_dir }}/home-assistant"
