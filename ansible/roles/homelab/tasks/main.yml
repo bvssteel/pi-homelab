@@ -1,0 +1,75 @@
+---
+- name: Ensure repository parent directory exists
+  ansible.builtin.file:
+    path: "{{ homelab_repo_dir | dirname }}"
+    state: directory
+    owner: "{{ homelab_admin_user }}"
+    group: "{{ homelab_admin_group }}"
+    mode: "0755"
+
+- name: Synchronize homelab repository
+  ansible.builtin.git:
+    repo: "{{ homelab_repo_url }}"
+    dest: "{{ homelab_repo_dir }}"
+    version: "{{ homelab_repo_branch }}"
+    update: true
+    force: true
+  become_user: "{{ homelab_admin_user }}"
+
+- name: Generate Docker Compose environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ homelab_repo_dir }}/.env"
+    owner: "{{ homelab_admin_user }}"
+    group: "{{ homelab_admin_group }}"
+    mode: "0600"
+
+- name: Validate Docker Compose configuration
+  ansible.builtin.command:
+    cmd: docker compose --env-file .env config --quiet
+    chdir: "{{ homelab_repo_dir }}"
+  changed_when: false
+  when: homelab_deploy_stack
+
+- name: Pull Docker images
+  ansible.builtin.command:
+    cmd: docker compose --env-file .env pull
+    chdir: "{{ homelab_repo_dir }}"
+  register: compose_pull
+  changed_when: "'Pulled' in compose_pull.stdout or 'Downloaded' in compose_pull.stdout"
+  when: homelab_deploy_stack
+
+- name: Deploy Docker Compose stack
+  ansible.builtin.command:
+    cmd: docker compose --env-file .env up -d --remove-orphans
+    chdir: "{{ homelab_repo_dir }}"
+  register: compose_up
+  changed_when: >-
+    'Creating' in compose_up.stderr or
+    'Recreating' in compose_up.stderr or
+    'Starting' in compose_up.stderr or
+    'Created' in compose_up.stderr
+  when: homelab_deploy_stack
+
+- name: Wait for Homepage
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ homelab_homepage_port }}"
+    status_code: 200
+  register: homepage_health
+  retries: 12
+  delay: 5
+  until: homepage_health.status == 200
+  when: homelab_deploy_stack
+
+- name: Wait for Home Assistant
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ homelab_home_assistant_port }}"
+    status_code:
+      - 200
+      - 302
+      - 401
+  register: home_assistant_health
+  retries: 24
+  delay: 5
+  until: home_assistant_health.status in [200, 302, 401]
+  when: homelab_deploy_stack
