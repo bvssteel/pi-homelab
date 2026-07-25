@@ -1,0 +1,45 @@
+---
+- name: Install Tailscale repository signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.noarmor.gpg"
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Tailscale APT repository
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_distribution_release }}.tailscale-keyring.list"
+    dest: /etc/apt/sources.list.d/tailscale.list
+    owner: root
+    group: root
+    mode: "0644"
+  register: tailscale_repository
+
+- name: Refresh APT cache after adding Tailscale repository
+  ansible.builtin.apt:
+    update_cache: true
+  when: tailscale_repository.changed
+
+- name: Install Tailscale
+  ansible.builtin.apt:
+    name: tailscale
+    state: present
+
+- name: Ensure Tailscale daemon is enabled and started
+  ansible.builtin.systemd_service:
+    name: tailscaled
+    enabled: true
+    state: started
+
+- name: Read Tailscale backend state
+  ansible.builtin.command:
+    cmd: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Explain how to authenticate Tailscale
+  ansible.builtin.debug:
+    msg: "Tailscale est installé mais non authentifié. Lancez : sudo tailscale up"
+  when: tailscale_status.rc != 0
