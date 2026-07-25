@@ -1,0 +1,28 @@
+---
+- name: Install Docker packages
+  ansible.builtin.apt:
+    name: "{{ homelab_docker_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure Docker service is enabled and started
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Add homelab administrator to Docker group
+  ansible.builtin.user:
+    name: "{{ homelab_admin_user }}"
+    groups: docker
+    append: true
+
+- name: Check Docker Compose v2 availability
+  ansible.builtin.command:
+    cmd: docker compose version
+  register: docker_compose_version
+  changed_when: false
+
+- name: Display Docker Compose version
+  ansible.builtin.debug:
+    msg: "{{ docker_compose_version.stdout }}"
