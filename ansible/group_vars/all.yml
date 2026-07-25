@@ -5,6 +5,7 @@ homelab_locale: fr_FR.UTF-8
 homelab_language: fr_FR:fr
 
 homelab_admin_user: "{{ ansible_user_id }}"
+homelab_admin_group: "{{ ansible_user_id }}"
 homelab_admin_shell: /usr/bin/zsh
 
 homelab_repo_url: https://github.com/bvssteel/pi-homelab.git
@@ -13,7 +14,9 @@ homelab_repo_branch: main
 homelab_repo_dir: /opt/pi-homelab
 
 homelab_root_dir: /srv/homelab
+homelab_config_dir: /srv/homelab/config
 homelab_state_dir: /srv/homelab/state
+homelab_data_dir: /srv/homelab/data
 homelab_backup_dir: /srv/homelab/backups
 homelab_log_dir: /srv/homelab/logs
 
@@ -33,5 +36,11 @@ homelab_base_packages:
   - zsh-autosuggestions
   - zsh-syntax-highlighting
 
+homelab_docker_packages:
+  - docker.io
+  - docker-compose-plugin
+
 homelab_enable_unattended_upgrades: true
 homelab_deploy_stack: true
+homelab_homepage_port: 3005
+homelab_home_assistant_port: 8123
