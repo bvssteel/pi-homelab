@@ -15,3 +15,8 @@ volumes/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Ansible dependencies and private local inventory
+.ansible/
+inventory/hosts.yml
+*.retry

@@ -1,0 +1,4 @@
+---
+# Reusable roles are validated upstream; lint only this repository's own files.
+exclude_paths:
+  - .ansible/
