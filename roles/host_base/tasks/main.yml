@@ -1,0 +1,21 @@
+---
+- name: Install the existing baseline packages from Ubuntu repositories
+  ansible.builtin.apt:
+    name: "{{ homelab_base_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Look up the existing SSH user's primary group
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+
+- name: Prepare the existing homelab directory layout
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_facts.getent_passwd[ansible_user][2] }}"
+    mode: "0755"
+  loop: "{{ homelab_directories }}"

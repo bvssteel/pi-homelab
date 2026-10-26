@@ -1,0 +1,7 @@
+---
+homelab:
+  hosts:
+    pi:
+      ansible_host: YOUR_PI_IP
+      ansible_user: YOUR_UBUNTU_USER
+      ansible_python_interpreter: /usr/bin/python3

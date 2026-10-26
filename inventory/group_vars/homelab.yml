@@ -1,0 +1,28 @@
+---
+# Existing setup.sh packages, now installed from Ubuntu repositories.
+homelab_base_packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - htop
+  - jq
+  - nano
+  - restic
+  - rclone
+
+# Existing state layout. No recursive ownership changes or data migration.
+homelab_directories:
+  - /srv/homelab
+  - /srv/homelab/state
+  - /srv/homelab/state/home-assistant
+  - /srv/homelab/backups
+  - /srv/homelab/logs
+
+# Reuse the existing installer behavior: the SSH user can administer Docker.
+docker_users:
+  - "{{ ansible_user }}"
+docker_install_compose_plugin: true
+docker_install_compose: false
+docker_service_enabled: true
+docker_service_state: started

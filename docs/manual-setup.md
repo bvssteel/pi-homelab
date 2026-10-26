@@ -1,152 +1,48 @@
-# Manual Setup Guide
+# Ubuntu baseline and existing application stack
 
-If you prefer to set up your Pi homelab step by step manually rather than using the automated script, follow this guide.
+## Host preparation
 
----
+Use the Ansible instructions in the README from WSL. The target is Ubuntu Server 24.04
+ARM64, already installed with SSH and a sudo user. Existing package updates performed
+before reboot do not need to be repeated.
 
-## Prerequisites
+`site.yml` prepares the host and installs Docker/Compose. It preserves SSH authentication
+and does not configure hardening, a firewall, networking, Tailscale or application deployment.
+The package list and existing directory layout are in `inventory/group_vars/homelab.yml`.
 
-- Raspberry Pi 5 flashed with Raspberry Pi OS (64-bit)
-- SSH access to your Pi
-- Internet connection
+## Optional: manually run the existing Compose stack
 
----
+This remains a separate operation. Do it only when ready to run the existing Home Assistant
+and Homepage services. On the Pi, use an existing checkout or clone the repository into your
+home directory; the new host baseline does not create a checkout in `/opt`.
 
-## Step 1 — Update System
-
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y curl wget git nano htop
+```console
+git clone https://github.com/bvssteel/pi-homelab.git
+cd pi-homelab
+cp .env.example .env
 ```
 
----
+Review `.env`, especially `HOMEPAGE_ALLOWED_HOSTS`, and add the exact hostname/IP and port
+you will use. Review the existing Compose mounts and published ports before starting it.
+The Compose file is unchanged by this baseline, including its current Docker socket mount.
 
-## Step 2 — Install Docker
-
-```bash
-curl -sSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
+```console
+docker compose config --quiet
+docker compose pull
+docker compose up -d
 ```
 
-Log out and back in, then verify:
+Existing installations should reuse their current checkout/project rather than start a
+second copy on the same ports. No migration or renaming of the existing stack is performed.
+Configuration changes belong in Git; the baseline itself does not execute these commands.
 
-```bash
-docker ps
+## Checks
+
+```console
+docker version
+docker compose version
+docker compose ps
 ```
 
-Fix IPv6 issues (common on Pi):
-
-```bash
-sudo nano /etc/docker/daemon.json
-```
-
-Add:
-
-```json
-{
-  "ipv6": false,
-  "ip": "0.0.0.0"
-}
-```
-
-```bash
-sudo systemctl restart docker
-```
-
----
-
-## Step 3 — Install Tailscale
-
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-```
-
-Follow the URL to authenticate. Install Tailscale on your other devices from [tailscale.com/download](https://tailscale.com/download).
-
----
-
-## Step 4 — Install Netdata
-
-```bash
-curl https://get.netdata.cloud/kickstart.sh > /tmp/netdata-kickstart.sh
-sudo sh /tmp/netdata-kickstart.sh
-```
-
-Access at `http://YOUR_PI_IP:19999`
-
----
-
-## Step 5 — Create Docker Stack
-
-```bash
-mkdir ~/homelab
-cd ~/homelab
-nano docker-compose.yml
-```
-
-Paste the contents of `docker-compose.yml` from this repo, replacing `YOUR_PI_IP` with your actual IP and updating any passwords.
-
----
-
-## Step 6 — Start Services
-
-```bash
-cd ~/homelab && docker compose up -d
-```
-
----
-
-## Step 7 — Configure Homepage
-
-```bash
-docker exec -it homepage sh
-```
-
-Then paste your services.yaml content.
-
----
-
-## Step 8 — Configure Pi-hole Network Wide
-
-1. Log into your router admin page
-2. Find DNS settings (under LAN or DHCP)
-3. Set Primary DNS to your Pi's IP address
-4. All devices on your network will use Pi-hole automatically
-
----
-
-## Step 9 — Pull an AI Model
-
-```bash
-docker exec -it ollama ollama pull llama3.2
-```
-
-Then access Open WebUI at `http://YOUR_PI_IP:3000`
-
----
-
-## Useful Commands
-
-```bash
-# View all containers
-docker ps
-
-# View logs
-docker logs <container-name> --tail 50
-
-# Restart a service
-docker restart <container-name>
-
-# Update all services
-cd ~/homelab && docker compose pull && docker compose up -d
-
-# Check Tailscale status
-tailscale status
-
-# Check disk usage
-df -h
-
-# Check system resources
-htop
-```
+Tailscale installation and the automatic Compose deployment will be separate changes.
+The old Bash installer and deployment scripts have been removed.

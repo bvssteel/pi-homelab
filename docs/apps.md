@@ -1,5 +1,9 @@
 # Application decisions
 
+The Ubuntu Ansible baseline currently installs host prerequisites and Docker only.
+The existing Compose services below remain manually deployed. Tailscale automation,
+backup configuration and later service decisions are outside this change.
+
 This document tracks the application scope for the homelab. The v0 goal is to establish a resilient base, not to run every possible service.
 
 ## v0

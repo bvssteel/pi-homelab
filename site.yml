@@ -1,0 +1,20 @@
+---
+- name: Prepare the Ubuntu homelab host and install Docker
+  hosts: homelab
+  become: true
+  pre_tasks:
+    - name: Require Ubuntu Server 24.04 ARM64 and an existing non-root SSH user
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version == '24.04'
+          - ansible_facts.architecture == 'aarch64'
+          - ansible_user is defined
+          - ansible_user != 'root'
+          - "'YOUR_' not in ansible_user"
+        fail_msg: >-
+          This baseline targets Ubuntu Server 24.04 ARM64. Set your Pi address
+          and existing Ubuntu sudo user in inventory/hosts.yml.
+  roles:
+    - role: host_base
+    - role: geerlingguy.docker
