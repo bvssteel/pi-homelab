@@ -1,158 +1,104 @@
 # Pi Homelab
 
-Minimal Raspberry Pi 5 homelab foundation focused on resilience, restoreability, and low-maintenance operations.
+Minimal Raspberry Pi 5 homelab foundation for **Ubuntu Server 24.04 LTS ARM64**.
+The current change introduces a small Ansible baseline and Docker installation.
 
-This repository is no longer a catalogue of self-hosted apps. It is the **v0 operating base** for the homelab:
+## Current scope
 
-- Docker Compose for the minimal application stack.
-- Tailscale for private remote access.
-- Homepage as the entry dashboard.
-- Home Assistant as the first real service.
-- Restic/rclone installed on the host for future state backups.
-- Clear `/srv/homelab` paths so state can be backed up and restored.
+Ansible runs from Ubuntu in WSL and connects to the Pi over SSH. It:
 
-## Philosophy
+1. Checks that the host runs Ubuntu 24.04 on ARM64.
+2. Installs the base packages already used by the previous installer, including Restic and rclone.
+3. Prepares the existing `/srv/homelab` directory layout without recursively changing application data.
+4. Installs and enables Docker Engine and the Compose plugin using
+   [geerlingguy.docker](https://github.com/geerlingguy/ansible-role-docker), pinned in `requirements.yml`.
+5. Adds the existing SSH user to the Docker group, matching the previous installer.
 
-```text
-Git = source of truth for deployable configuration
-/srv/homelab/state = application state that cannot fully live in Git
-Backups = encrypted copy of non-declarative state
-The running host = replaceable instance
-```
+This baseline does **not** deploy applications, install Tailscale, change SSH settings,
+configure a firewall, apply hardening, mount USB storage, upgrade the OS or reboot.
+Those changes will be considered separately. No Bash scripts are required or retained.
 
-The goal is not to make the Raspberry Pi immortal. The goal is to make it easy to rebuild.
+## Existing application stack
 
-## v0 stack
+The existing Compose file and Homepage configuration are preserved:
 
-| Component | Role | Status |
+| Service | Definition | Access when manually deployed |
 |---|---|---|
-| Docker / Compose | Container runtime | v0 |
-| Tailscale | Private remote access | v0 |
-| Home Assistant | Smart home hub | v0 |
-| Homepage | Homelab dashboard | v0 |
-| Restic + rclone | Backup/restore tooling | v0 host tooling |
+| Home Assistant Container | `docker-compose.yml` | HTTP 8123 |
+| Homepage | `docker-compose.yml` | HTTP 3005 |
 
-Intentionally excluded from v0: Portainer, Watchtower, Caddy, Traefik, Pi-hole, AdGuard Home, Uptime Kuma, Semaphore, Nextcloud, n8n, Vaultwarden, Ollama, Open WebUI, Stirling PDF, and Netdata.
+Restic and rclone remain available as host tooling. Their installation does not configure
+a backup. Tailscale remains the intended private access solution, but its installation
+has not yet been ported to this Ansible baseline.
 
-See [`docs/apps.md`](docs/apps.md) for the decision log.
+## Start from WSL
 
-## Filesystem layout
+Ubuntu and SSH must already work on the Pi. The user configured in the inventory must
+already exist and have sudo rights. Python 3 must be available on the Pi.
 
-```text
-/opt/pi-homelab
-└── Git checkout of this repository
+In your **WSL terminal**, clone the repository under your Linux home directory:
 
-/srv/homelab
-├── state/
-│   └── home-assistant/
-├── backups/
-└── logs/
+```console
+git clone https://github.com/bvssteel/pi-homelab.git
+cd pi-homelab
+ansible-galaxy role install -r requirements.yml
+cp inventory/hosts.example.yml inventory/hosts.yml
 ```
 
-## Quick start
+Edit `inventory/hosts.yml` with the Pi's address and your existing Ubuntu username.
+This local file is ignored by Git. Do not store passwords or private keys in the repository.
 
-Flash Raspberry Pi OS Lite 64-bit, enable SSH, then run:
+Connect once from WSL and verify the Pi's SSH fingerprint:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/bvssteel/pi-homelab/main/setup.sh | bash
+```console
+ssh YOUR_UBUNTU_USER@YOUR_PI_IP
 ```
 
-To test the v0 branch before merging it:
+Return to WSL with `exit`. If using SSH password authentication, install `sshpass`
+in WSL (`sudo apt install sshpass`), then run:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/bvssteel/pi-homelab/v0-minimal-stack/setup.sh | REPO_BRANCH=v0-minimal-stack bash
+```console
+ansible homelab -m ansible.builtin.ping --ask-pass
+ansible-playbook site.yml --ask-pass --ask-become-pass
 ```
 
-The bootstrap script will:
+If SSH keys already work, omit `--ask-pass`. `--ask-become-pass` asks for the sudo password.
+SSH authentication is not changed by the playbook. Log out and reconnect before using
+Docker without sudo: Docker group membership grants root-equivalent control of the host.
 
-1. Install base packages.
-2. Install Docker if missing.
-3. Install and start Tailscale.
-4. Prepare `/srv/homelab` directories.
-5. Clone or update this repo in `/opt/pi-homelab`.
-6. Generate `/opt/pi-homelab/.env` if missing.
-7. Deploy the Docker Compose stack.
+## Verify
 
-## Access
+On the Pi:
 
-After deployment:
-
-```text
-Homepage:       http://<pi-ip>:3005
-Home Assistant: http://<pi-ip>:8123
+```console
+docker version
+docker compose version
 ```
 
-Home Assistant uses host networking for discovery-friendly smart home behavior.
+From WSL, rerun the same playbook to reconcile the host configuration. The Docker role
+uses the official Docker package repository. Its role version is pinned; installed Docker
+packages follow the repository's available version on first installation. This baseline
+does not configure automatic updates or perform a blanket package upgrade.
 
-Homepage is published on port `3005` and uses the versioned config in `config/homepage`.
+## Configuration and state
 
-## Day-to-day operations
+| Path | Purpose |
+|---|---|
+| WSL checkout | Ansible, inventory and versioned Compose/configuration |
+| `/srv/homelab/state/home-assistant` | Existing Home Assistant state |
+| `/srv/homelab/backups` | Existing local backup directory |
+| `/srv/homelab/logs` | Existing log directory |
 
-Deploy the current Git state:
+Git describes configuration; application state must be backed up separately.
+The baseline does not clone this repository onto the Pi or start containers.
 
-```bash
-cd /opt/pi-homelab
-./scripts/deploy.sh
-```
+## Documentation
 
-Run a backup once Restic is configured:
+- [Host baseline and existing Compose deployment](docs/manual-setup.md)
+- [Backup and restore using the existing tools](docs/restore.md)
+- [Storage scope](docs/migrate-to-ssd.md)
+- [Application decisions](docs/apps.md)
 
-```bash
-cd /opt/pi-homelab
-./scripts/backup.sh
-```
-
-Restore the latest backup:
-
-```bash
-cd /opt/pi-homelab
-./scripts/restore.sh latest
-```
-
-See [`docs/restore.md`](docs/restore.md) for backup prerequisites and recovery notes.
-
-## Configuration and state model
-
-Declarative configuration belongs in Git:
-
-```text
-docker-compose.yml
-config/homepage/*.yaml
-scripts/*.sh
-docs/*.md
-backup/*.txt
-```
-
-Non-declarative state belongs under `/srv/homelab/state` and must be backed up:
-
-```text
-/srv/homelab/state/home-assistant
-```
-
-Home Assistant declarative YAML will eventually live in a separate repository. This repo only owns the deployment contract and state mount point.
-
-## Update policy
-
-v0 intentionally does **not** use Watchtower.
-
-The future direction is:
-
-```text
-Renovate updates Git
-Git describes the desired version
-The Pi deploys what Git declares
-```
-
-For now, images use simple stable/latest channels:
-
-```text
-ghcr.io/home-assistant/home-assistant:stable
-ghcr.io/gethomepage/homepage:latest
-```
-
-## Next milestones
-
-- Add a separate Home Assistant config repository.
-- Add Restic repository configuration and a first restore test.
-- Add Renovate for controlled image updates.
-- Decide whether Uptime Kuma, Pi-hole/AdGuard, Portainer, Semaphore, or Caddy belong in v1.
+No changes have been applied to the Pi by editing this repository. Syntax and lint checks
+can validate the Ansible files; a first run and subsequent rerun on the Pi are still required
+before claiming working provisioning and idempotence on hardware.
